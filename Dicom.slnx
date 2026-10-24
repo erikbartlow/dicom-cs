@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Dicom.Codecs/Dicom.Codecs.csproj" />
+    <Project Path="src/Dicom.Core/Dicom.Core.csproj" />
+    <Project Path="src/Dicom.Dictionary.Std/Dicom.Dictionary.Std.csproj" />
+    <Project Path="src/Dicom.Encoding/Dicom.Encoding.csproj" />
+    <Project Path="src/Dicom.Object/Dicom.Object.csproj" />
+    <Project Path="src/Dicom.Parser/Dicom.Parser.csproj" />
+    <Project Path="src/Dicom.PixelData/Dicom.PixelData.csproj" />
+    <Project Path="src/DicomObjects.Compat/DicomObjects.Compat.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Dicom.Tests/Dicom.Tests.csproj" />
+  </Folder>
+</Solution>
