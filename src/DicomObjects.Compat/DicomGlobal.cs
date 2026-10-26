@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Dicom.Core;
 using Dicom.Dictionary.Std;
 
@@ -85,17 +86,20 @@ public static class DicomGlobal
     public static void SetRegWord(string name, int value) => Settings[name] = value;
 
     /// <summary>The settings recorded through <see cref="SetRegWord"/>.</summary>
-    public static Dictionary<string, int> Settings { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public static ConcurrentDictionary<string, int> Settings { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
-/// The standard dictionary extended with privately defined attributes.
+/// The standard dictionary extended with privately defined attributes. Attributes may be added
+/// while other threads are looking attributes up, which is what the web services do when the
+/// first request of a process registers the private attributes.
 /// </summary>
 public sealed class ExtensibleDataDictionary : IDataDictionary
 {
     private readonly IDataDictionary _standard;
-    private readonly Dictionary<Tag, DictionaryEntry> _private = [];
-    private readonly Dictionary<string, DictionaryEntry> _byKeyword = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<Tag, DictionaryEntry> _private = new();
+    private readonly ConcurrentDictionary<string, DictionaryEntry> _byKeyword =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public ExtensibleDataDictionary(IDataDictionary standard) => _standard = standard;
 

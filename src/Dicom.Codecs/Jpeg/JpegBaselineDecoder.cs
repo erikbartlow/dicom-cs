@@ -1,8 +1,10 @@
 namespace Dicom.Codecs.Jpeg;
 
 /// <summary>
-/// Reads a baseline, Huffman coded JPEG stream of eight bit samples, including streams whose
-/// chrominance is subsampled. Progressive and arithmetic coded streams are refused.
+/// Reads a sequential, Huffman coded JPEG stream of eight or twelve bit samples, including
+/// streams whose chrominance is subsampled. Baseline (SOF0) and extended sequential (SOF1)
+/// streams differ only in the sample precision they allow, so both are read here. Progressive
+/// and arithmetic coded streams are refused.
 /// </summary>
 internal static class JpegBaselineDecoder
 {
@@ -21,6 +23,7 @@ internal static class JpegBaselineDecoder
         int height = 0;
         int restartInterval = 0;
         int adobeTransform = -1;
+        int precision = 8;
 
         while (position + 1 < jpeg.Length)
         {
@@ -45,8 +48,11 @@ internal static class JpegBaselineDecoder
                 {
                     int length = Read16(jpeg, position);
 
-                    if (jpeg[position + 2] != 8)
-                        throw new CodecException("Baseline JPEG of more than eight bits is not supported.");
+                    precision = jpeg[position + 2];
+
+                    if (precision is not (8 or 12))
+                        throw new CodecException(
+                            $"Sequential JPEG of {precision} bit samples is not supported.");
 
                     height = Read16(jpeg, position + 3);
                     width = Read16(jpeg, position + 5);
@@ -168,7 +174,8 @@ internal static class JpegBaselineDecoder
                         quantisation,
                         width,
                         height,
-                        restartInterval);
+                        restartInterval,
+                        precision);
 
                     samples.IsYCbCr = components.Length == 3 && adobeTransform != 0;
 
@@ -207,7 +214,7 @@ internal static class JpegBaselineDecoder
 }
 
 /// <summary>
-/// One component of a baseline frame, with the tables its blocks are coded with.
+/// One component of a sequential frame, with the tables its blocks are coded with.
 /// </summary>
 internal sealed class JpegScanComponent
 {
@@ -231,7 +238,7 @@ internal sealed class JpegScanComponent
 
     public JpegHuffmanTable? AcTable { get; set; }
 
-    public byte[] Plane { get; set; } = [];
+    public ushort[] Plane { get; set; } = [];
 
     public int PlaneWidth { get; set; }
 

@@ -4,3 +4,5 @@ obj/
 *.user
 artifacts/
 TestResults/
+/SPINECAMP_REQUIREMENTS.md
+/AUGGIE_TASKS.md

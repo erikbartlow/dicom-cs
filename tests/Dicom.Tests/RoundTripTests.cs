@@ -156,6 +156,25 @@ public class PixelDataTests
         Assert.True(rendered[3] > rendered[2] && rendered[2] > rendered[1]);
     }
 
+    /// <summary>
+    /// The byte order of a file reaches the samples as well as the attributes, so a big endian
+    /// or deflated file has to give the same stored values as a little endian one.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RoundTripTests.Syntaxes), MemberType = typeof(RoundTripTests))]
+    public void ReadsTheSameStoredValuesWhateverTheFileIsWrittenAs(TransferSyntax syntax)
+    {
+        InMemDicomObject data = Image(bitsAllocated: 16, signed: true, [0, unchecked((ushort)-500), 1000, 4095]);
+
+        using MemoryStream stream = new();
+        DicomFile.ToFile(data, syntax).Save(stream);
+        stream.Position = 0;
+
+        NativePixelData pixels = NativePixelData.From(DicomFile.Read(stream));
+
+        Assert.Equal([0, -500, 1000, 4095], pixels.GetFrameSamples(0));
+    }
+
     private static InMemDicomObject Image(int bitsAllocated, bool signed, ushort[] samples)
     {
         InMemDicomObject data = new();

@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="CharLS.Managed" Version="0.8.0" />
+    <PackageReference Include="CoreJ2K" Version="2.4.1.108" />
+  </ItemGroup>
+
 </Project>

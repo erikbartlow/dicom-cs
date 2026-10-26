@@ -1,7 +1,7 @@
 namespace Dicom.Codecs.Jpeg;
 
 /// <summary>
-/// The entropy coded segment of a baseline scan: blocks are decoded minimum coded unit by
+/// The entropy coded segment of a sequential scan: blocks are decoded minimum coded unit by
 /// minimum coded unit into one plane per component, then the planes are sampled back up to
 /// the size of the frame.
 /// </summary>
@@ -14,7 +14,8 @@ internal static class JpegBaselineScan
         int[][] quantisation,
         int width,
         int height,
-        int restartInterval)
+        int restartInterval,
+        int precision)
     {
         if (width <= 0 || height <= 0 || components.Length == 0)
             throw new CodecException("The compressed frame has no dimensions.");
@@ -28,7 +29,7 @@ internal static class JpegBaselineScan
         {
             component.PlaneWidth = mcusAcross * component.HorizontalSampling * 8;
             component.PlaneHeight = mcusDown * component.VerticalSampling * 8;
-            component.Plane = new byte[component.PlaneWidth * component.PlaneHeight];
+            component.Plane = new ushort[component.PlaneWidth * component.PlaneHeight];
         }
 
         JpegBitReader reader = new(jpeg, start);
@@ -59,7 +60,8 @@ internal static class JpegBaselineScan
                                 component,
                                 ((mcuX * component.HorizontalSampling) + blockX) * 8,
                                 ((mcuY * component.VerticalSampling) + blockY) * 8,
-                                block);
+                                block,
+                                precision);
                         }
                     }
                 }
@@ -73,7 +75,7 @@ internal static class JpegBaselineScan
             }
         }
 
-        return Interleave(components, width, height, horizontalMax, verticalMax);
+        return Interleave(components, width, height, horizontalMax, verticalMax, precision);
     }
 
     private static int ReadBlock(
@@ -129,8 +131,17 @@ internal static class JpegBaselineScan
         JpegTransform.Inverse(block, scratch);
     }
 
-    private static void Store(JpegScanComponent component, int left, int top, double[] block)
+    private static void Store(
+        JpegScanComponent component,
+        int left,
+        int top,
+        double[] block,
+        int precision)
     {
+        // The level shift and the ceiling both follow the sample precision the frame header gave.
+        int shift = 1 << (precision - 1);
+        int highest = (1 << precision) - 1;
+
         for (int y = 0; y < 8; y++)
         {
             int row = top + y;
@@ -146,7 +157,7 @@ internal static class JpegBaselineScan
                     break;
 
                 component.Plane[(row * component.PlaneWidth) + column] =
-                    (byte)Math.Clamp(Math.Round(block[(y * 8) + x]) + 128, 0, 255);
+                    (ushort)Math.Clamp(Math.Round(block[(y * 8) + x]) + shift, 0, highest);
             }
         }
     }
@@ -156,7 +167,8 @@ internal static class JpegBaselineScan
         int width,
         int height,
         int horizontalMax,
-        int verticalMax)
+        int verticalMax,
+        int precision)
     {
         int count = components.Length;
         int[] samples = new int[width * height * count];
@@ -179,7 +191,13 @@ internal static class JpegBaselineScan
             }
         }
 
-        return new JpegFrameSamples(samples, width, height, count, 8, [.. components.Select(static c => c.Id)]);
+        return new JpegFrameSamples(
+            samples,
+            width,
+            height,
+            count,
+            precision,
+            [.. components.Select(static c => c.Id)]);
     }
 
     private static int Extend(int value, int category) =>

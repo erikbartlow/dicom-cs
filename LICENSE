@@ -1,0 +1,16 @@
+Copyright (c) 2026 Medical Metrics, Inc.
+
+This library is a .NET port of DICOM-rs, which is dual licensed under the Apache
+License, Version 2.0 and the MIT license. This library keeps that dual licence, so
+you may use it under either licence, at your option:
+
+- Apache License, Version 2.0: see LICENSE-APACHE, or
+  <http://www.apache.org/licenses/LICENSE-2.0>
+- MIT license: see LICENSE-MIT, or <http://opensource.org/licenses/MIT>
+
+Unless you state otherwise, any contribution you intentionally submit for inclusion
+in this work, as defined in the Apache-2.0 licence, is dual licensed as above, with
+no additional terms or conditions.
+
+The copyright of the DICOM-rs code this library derives from, and the copyrights of
+the third-party packages it depends on, are recorded in THIRD-PARTY-NOTICES.md.

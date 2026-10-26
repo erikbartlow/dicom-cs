@@ -28,7 +28,7 @@ public class CompatFacadeTests
         Assert.False(read[0x0010, 0x0010].IsNull);
         Assert.Equal((ushort)512, read.Value(0x0028, 0x0010));
         Assert.Equal("2.5", read[0x0028, 0x1053].Value);
-        Assert.Equal(UIDs.SOPClasses.ComputedRadiography, read.SOPClass);
+        Assert.Equal(UIDs.SOPClasses.ComputedRadiography.Value, read.SOPClass);
         Assert.Equal(UIDs.TransferSyntaxes.ExplicitVRLittleEndian, read.OriginalTS);
     }
 
@@ -141,6 +141,92 @@ public class CompatFacadeTests
         Assert.Equal(0.5f, read[0x7BF7, 0x1201].Value);
     }
 
+    /// <summary>
+    /// MMDxWebServices analyses several studies at once in one process, and registers its private
+    /// attributes on the first request, while other requests are already reading data sets. So
+    /// reading, decoding, modifying and writing has to give the same answer on eight threads as on
+    /// one, with attributes being registered throughout.
+    /// </summary>
+    [Fact]
+    public async Task AnalysesTheSameWayOnEightThreadsAsOnOne()
+    {
+        byte[][] sources = ConcurrencySources();
+        string[] expected = [.. sources.Select(Analyse)];
+        string[][] results = new string[8][];
+
+        using CancellationTokenSource registering = new();
+
+        Task registrations = Task.Run(() =>
+        {
+            for (int i = 0; !registering.IsCancellationRequested; i++)
+            {
+                int element = 0x1000 + (i % 64);
+
+                DicomGlobal.AddDictionaryElement(0x7BF9, element, "LO", "1", $"MMI Concurrency {element:X4}");
+                DicomGlobal.SetRegWord("ForceRGB", i % 2);
+            }
+        });
+
+        Parallel.For(0, results.Length, thread =>
+        {
+            string[] digests = [];
+
+            for (int iteration = 0; iteration < 50; iteration++)
+                digests = [.. sources.Select(Analyse)];
+
+            results[thread] = digests;
+        });
+
+        await registering.CancelAsync();
+        await registrations;
+
+        foreach (string[] digests in results)
+            Assert.Equal(expected, digests);
+    }
+
+    /// <summary>
+    /// The data sets the concurrency test works on: one stored natively, one whose pixel data has
+    /// to be decoded, and one colour study of several frames.
+    /// </summary>
+    private static byte[][] ConcurrencySources()
+    {
+        using DicomImage gray = GrayImage();
+        using DicomImage colour = ColourImage(frames: 3);
+
+        gray.Write(out byte[] native, UIDs.TransferSyntaxes.ExplicitVRLittleEndian, 100);
+        gray.Write(out byte[] compressed, UIDs.TransferSyntaxes.JPEGLosslessFirstOrder, 100);
+        colour.Write(out byte[] baseline, UIDs.TransferSyntaxes.JPEGBaseline, 100);
+
+        return [native, compressed, baseline];
+    }
+
+    /// <summary>
+    /// Reads a data set, decodes its first frame, changes an attribute and writes it back, as one
+    /// analysis does. The answer covers the decoded samples, the samples read back from what was
+    /// written, and the attribute that was changed, so that it does not depend on the generated
+    /// identifiers a write produces.
+    /// </summary>
+    private static string Analyse(byte[] contents)
+    {
+        using DicomImage image = new(contents);
+        Array pixels = image.RawPixelValuesByFrame(1);
+
+        image.Add(0x0008, 0x103E, "Concurrency");
+        image.Write(out byte[] written, UIDs.TransferSyntaxes.JPEGLosslessFirstOrder, 100);
+
+        using DicomImage reread = new(written);
+
+        return $"{Digest(pixels)}:{Digest(reread.RawPixelValuesByFrame(1))}:{reread[0x0008, 0x103E].Value}";
+    }
+
+    private static string Digest(Array samples)
+    {
+        byte[] bytes = new byte[Buffer.ByteLength(samples)];
+        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
+
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+    }
+
     [Fact]
     public void WritesColourFramesAsBaselineJpeg()
     {
@@ -231,8 +317,8 @@ public class CompatFacadeTests
         Assert.IsAssignableFrom<DicomDataSet>(image);
         Assert.Same(image, image.DataSet);
         Assert.Equal(ValidationOptions.None, image.ValidationOptions);
-        Assert.Equal("1.2.840.10008.5.1.4.1.1.7.4", UIDs.SOPClasses.MultiFrameTrueColorSC);
-        Assert.Equal("1.2.840.10008.5.1.4.1.1.104.1", UIDs.SOPClasses.EncapsulatedPDF);
+        Assert.Equal("1.2.840.10008.5.1.4.1.1.7.4", UIDs.SOPClasses.MultiFrameTrueColorSC.Value);
+        Assert.Equal("1.2.840.10008.5.1.4.1.1.104.1", UIDs.SOPClasses.EncapsulatedPDF.Value);
         Assert.True(new ReadBehaviours { CloseFilesAfterReading = true }.CloseFilesAfterReading);
 
         DicomDataSet dataSet = new();
@@ -241,6 +327,25 @@ public class CompatFacadeTests
         Assert.True(dataSet[0x0020, 0x0037].IsMultiple);
         Assert.False(dataSet[0x0010, 0x0010].IsMultiple);
         Assert.Equal("Image Orientation (Patient)", dataSet[0x0020, 0x0037].Description);
+    }
+
+    /// <summary>
+    /// The storage classes are identifiers rather than strings, so a caller can read the value,
+    /// compare one with a string, and store one wherever a value is taken loosely.
+    /// </summary>
+    [Fact]
+    public void TreatsStorageClassesAsIdentifiersAndAsStrings()
+    {
+        DicomDataSet dataSet = new();
+        dataSet.Add(0x0008, 0x0016, UIDs.SOPClasses.SecondaryCapture);
+
+        string sopClass = UIDs.SOPClasses.SecondaryCapture;
+
+        Assert.Equal("1.2.840.10008.5.1.4.1.1.7", dataSet[0x0008, 0x0016].Value);
+        Assert.Equal("1.2.840.10008.5.1.4.1.1.7", sopClass);
+        Assert.Equal("1.2.840.10008.5.1.4.1.1.7", UIDs.SOPClasses.SecondaryCapture.Value);
+        Assert.True(sopClass == UIDs.SOPClasses.SecondaryCapture);
+        Assert.Same(UIDs.SOPClasses.MultiFrameTrueColorSecondaryCapture, UIDs.SOPClasses.MultiFrameTrueColorSC);
     }
 
     /// <summary>A small grayscale image of the kind the analysis reads.</summary>

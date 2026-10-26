@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Dicom.Codecs;
 
 /// <summary>
@@ -35,14 +37,15 @@ public interface IPixelCodec
 
 /// <summary>
 /// The codecs available, keyed by transfer syntax. Callers can replace a codec or add one
-/// for a syntax this library does not implement.
+/// for a syntax this library does not implement, which may happen while other threads are
+/// looking codecs up. The codecs themselves keep no state between calls.
 /// </summary>
 public static class PixelCodecRegistry
 {
-    private static readonly Dictionary<string, IPixelCodec> Codecs = Build();
+    private static readonly ConcurrentDictionary<string, IPixelCodec> Codecs = Build();
 
     /// <summary>Every codec available.</summary>
-    public static IReadOnlyCollection<IPixelCodec> All => Codecs.Values;
+    public static IReadOnlyCollection<IPixelCodec> All => [.. Codecs.Values];
 
     /// <summary>The codec for a transfer syntax, or null when there is none.</summary>
     public static IPixelCodec? Lookup(string? transferSyntaxUid) =>
@@ -78,17 +81,22 @@ public static class PixelCodecRegistry
     /// <summary>Adds or replaces the codec for a transfer syntax.</summary>
     public static void Register(IPixelCodec codec) => Codecs[codec.TransferSyntaxUid] = codec;
 
-    private static Dictionary<string, IPixelCodec> Build()
+    private static ConcurrentDictionary<string, IPixelCodec> Build()
     {
         IPixelCodec[] codecs =
         [
             new JpegLosslessCodec("1.2.840.10008.1.2.4.57", "JPEG Lossless, Non-Hierarchical (Process 14)"),
             new JpegLosslessCodec("1.2.840.10008.1.2.4.70", "JPEG Lossless, Selection Value 1 (Process 14)"),
             new JpegBaselineCodec(),
+            new JpegExtendedCodec(),
+            new JpegLsCodec("1.2.840.10008.1.2.4.80", "JPEG-LS Lossless"),
+            new JpegLsCodec("1.2.840.10008.1.2.4.81", "JPEG-LS Lossy (Near-Lossless)"),
+            new Jpeg2000Codec("1.2.840.10008.1.2.4.90", "JPEG 2000 Image Compression (Lossless Only)"),
+            new Jpeg2000Codec("1.2.840.10008.1.2.4.91", "JPEG 2000 Image Compression"),
             new RleCodec(),
         ];
 
-        Dictionary<string, IPixelCodec> map = new(StringComparer.Ordinal);
+        ConcurrentDictionary<string, IPixelCodec> map = new(StringComparer.Ordinal);
 
         foreach (IPixelCodec codec in codecs)
             map[codec.TransferSyntaxUid] = codec;

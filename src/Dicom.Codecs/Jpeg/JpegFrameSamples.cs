@@ -46,21 +46,26 @@ internal sealed class JpegFrameSamples
         if (!IsYCbCr || Components != 3)
             return;
 
+        // The chrominance centre and the ceiling both follow the sample precision.
+        double centre = 1 << (Precision - 1);
+        int highest = (1 << Precision) - 1;
+
         for (int i = 0; i < Samples.Length; i += 3)
         {
             double luminance = Samples[i];
-            double blue = Samples[i + 1] - 128.0;
-            double red = Samples[i + 2] - 128.0;
+            double blue = Samples[i + 1] - centre;
+            double red = Samples[i + 2] - centre;
 
-            Samples[i] = Clamp(luminance + (1.402 * red));
-            Samples[i + 1] = Clamp(luminance - (0.344136 * blue) - (0.714136 * red));
-            Samples[i + 2] = Clamp(luminance + (1.772 * blue));
+            Samples[i] = Clamp(luminance + (1.402 * red), highest);
+            Samples[i + 1] = Clamp(luminance - (0.344136 * blue) - (0.714136 * red), highest);
+            Samples[i + 2] = Clamp(luminance + (1.772 * blue), highest);
         }
 
         IsYCbCr = false;
     }
 
-    private static int Clamp(double value) => (int)Math.Clamp(Math.Round(value), 0, 255);
+    private static int Clamp(double value, int highest) =>
+        (int)Math.Clamp(Math.Round(value), 0, highest);
 
     /// <summary>
     /// The samples written out as uncompressed pixel data of the given layout, in little endian

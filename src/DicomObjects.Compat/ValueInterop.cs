@@ -69,6 +69,9 @@ internal static class ValueInterop
             case string text:
                 return PrimitiveValue.FromString(text);
 
+            case UID uid:
+                return PrimitiveValue.FromString(uid.Value);
+
             case string[] texts:
                 return PrimitiveValue.FromStrings(texts);
 

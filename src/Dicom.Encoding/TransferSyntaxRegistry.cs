@@ -1,9 +1,12 @@
+using System.Collections.Concurrent;
+
 namespace Dicom.Encoding;
 
 /// <summary>
 /// The transfer syntaxes this library recognises. The uncompressed syntaxes can be read and
 /// written in full; the compressed ones can be read and written as encapsulated fragments,
-/// but the fragments are not decoded.
+/// but the fragments are not decoded. A syntax may be registered while other threads are
+/// looking syntaxes up.
 /// </summary>
 public static class TransferSyntaxRegistry
 {
@@ -27,10 +30,10 @@ public static class TransferSyntaxRegistry
     /// <summary>The transfer syntax assumed for a data set with no file meta group.</summary>
     public static TransferSyntax Default => ImplicitVrLittleEndian;
 
-    private static readonly Dictionary<string, TransferSyntax> ByUid = Build();
+    private static readonly ConcurrentDictionary<string, TransferSyntax> ByUid = Build();
 
     /// <summary>Every recognised transfer syntax.</summary>
-    public static IReadOnlyCollection<TransferSyntax> All => ByUid.Values;
+    public static IReadOnlyCollection<TransferSyntax> All => [.. ByUid.Values];
 
     /// <summary>The transfer syntax with the given identifier, or null when it is not recognised.</summary>
     public static TransferSyntax? Lookup(string? uid) =>
@@ -45,7 +48,7 @@ public static class TransferSyntaxRegistry
     /// <summary>Adds or replaces a transfer syntax, for data sets using a private encoding.</summary>
     public static void Register(TransferSyntax syntax) => ByUid[syntax.Uid] = syntax;
 
-    private static Dictionary<string, TransferSyntax> Build()
+    private static ConcurrentDictionary<string, TransferSyntax> Build()
     {
         TransferSyntax[] syntaxes =
         [
@@ -69,7 +72,7 @@ public static class TransferSyntaxRegistry
             Encapsulated("1.2.840.10008.1.2.5", "RLE Lossless"),
         ];
 
-        Dictionary<string, TransferSyntax> map = new(StringComparer.Ordinal);
+        ConcurrentDictionary<string, TransferSyntax> map = new(StringComparer.Ordinal);
 
         foreach (TransferSyntax syntax in syntaxes)
             map[syntax.Uid] = syntax;
